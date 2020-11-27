@@ -6,7 +6,7 @@ Created on Tue Sep 22 09:52:51 2020
 @author: tianyu
 """
 
-for idxx1, idxx2 in [['3','4']]:    
+for idxx1, idxx2 in [['1','2']]:    
     import sys, os
     os.chdir("/Users/tianyu/Documents/sigGCN")
     #os.chdir("/gpfs/sharedfs1/shn15004/tianyu/spectralGCN")
