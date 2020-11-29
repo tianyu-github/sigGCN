@@ -47,7 +47,7 @@ for idxx1, idxx2 in [['','']]:
         dtypeLong = torch.LongTensor
         torch.manual_seed(1)
     
-    from som import SOM 
+    #from som import SOM 
     from grid_graph import grid_graph
     from coarsening import coarsen, laplacian
     from coarsening import lmax_L
