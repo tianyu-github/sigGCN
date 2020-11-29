@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Sep 22 09:52:51 2020
+Created on Sun Mar 22 14:00:37 2020
 
 @author: tianyu
 """
 
-for idxx1, idxx2 in [['1','2']]:    
+for idxx1, idxx2 in [['','']]:    
     import sys, os
-    os.chdir("/Users/tianyu/Documents/sigGCN")
+    os.chdir("/Users/tianyu/Desktop/graph_convnet_retina-master")
     #os.chdir("/gpfs/sharedfs1/shn15004/tianyu/spectralGCN")
     #os.chdir("/shared/nabavilab/tianyu/")
     import torch
@@ -47,12 +47,13 @@ for idxx1, idxx2 in [['1','2']]:
         dtypeLong = torch.LongTensor
         torch.manual_seed(1)
     
+    from som import SOM 
     from grid_graph import grid_graph
     from coarsening import coarsen, laplacian
     from coarsening import lmax_L
     from coarsening import perm_data
     from coarsening import rescale_L
-    from layermodel import *
+    from layermodel_old import *
     import utilsdata
     from utilsdata import *
     import warnings
@@ -69,11 +70,11 @@ for idxx1, idxx2 in [['1','2']]:
     # TODO: change cgcnn for combinatorial Laplacians.
     parser.add_argument('--normalized_laplacian', type=bool, default = True, help='Graph Laplacian: normalized.')
     parser.add_argument('--coarsening_levels', type=int, default = 4, help='Number of coarsened graphs.')
-    parser.add_argument('--lr', type=float, default = 0.01, help='learning rate.')
+    parser.add_argument('--lr', type=float, default = 0.05, help='learning rate.')
     parser.add_argument('--num_gene', type=int, default = 1000, help='# of genes')
-    parser.add_argument('--epochs', type=int, default = 1, help='# of epoch')
+    parser.add_argument('--epochs', type=int, default = 30, help='# of epoch')
     parser.add_argument('--batchsize', type=int, default = 64, help='# of genes')
-    parser.add_argument('--dataset', type=str, default='BaronMouse', help="dataset")
+    parser.add_argument('--dataset', type=str, default='Zhengsorted', help="dataset")
     parser.add_argument('--id1', type=str, default = idxx1, help='test in pancreas')
     parser.add_argument('--id2', type=str, default = idxx2, help='test in pancreas')
     
@@ -81,6 +82,8 @@ for idxx1, idxx2 in [['1','2']]:
     parser.add_argument('--clustering', type=str, default='kmeans', help="Clustering method")
     parser.add_argument('--thres', type=float, default = 0.1, help='# of epoch')
     parser.add_argument('--dist', type=str, default='', help="dist type")
+    parser.add_argument('--sampling_rate', type=float, default = 0.15, help='# sampling rate of cells')
+
     args = parser.parse_args()
     #['Xin','BaronHuman','Muraro','Segerstolpe', 'BaronMouse']
     
@@ -97,7 +100,7 @@ for idxx1, idxx2 in [['1','2']]:
         pathnet ='/Users/publicuser/Google Drive/fasttext/cnn/TCGA_cnn/BIOGRID-ALL-3.5.169.tab2.txt'    
         
         print('load data...')    
-        adjall, alldata,labels,shuffle_index = utilsdata.load_largesc(path = filepath, dataset=args.dataset, net='String')
+#        adjall, alldata,labels,shuffle_index = utilsdata.load_largesc(path = filepath, dataset=args.dataset, net='String')
     #    cells2keep = np.loadtxt(filepath+args.dataset+"/cells2keep_"+args.dataset+".txt", dtype='int64')
     #    genes2keep = np.loadtxt(filepath+args.dataset+"/genes2keep_"+args.dataset+".txt", dtype='int64')
     ##    labels = labels[np.where(cells2keep)[0]]
@@ -331,6 +334,17 @@ for idxx1, idxx2 in [['1','2']]:
         val_labels = labels[shuffle_index[train_size:val_size]]
         test_labels = labels[shuffle_index[val_size:]]
         
+        sampling_rate = args.sampling_rate 
+        train_size, val_size = int(len(shuffle_index)* 0.8*sampling_rate), int(len(shuffle_index)* 0.9*sampling_rate)
+        sampl_start = int(len(shuffle_index)* sampling_rate * 1)
+        sampl_end = int(len(shuffle_index) * sampling_rate * 2)
+        
+        train_data = np.asarray(features.T).astype(np.float32)[shuffle_index[sampl_start:sampl_start+train_size]]
+        val_data = np.asarray(features.T).astype(np.float32)[shuffle_index[train_size:val_size]]
+        test_data = np.asarray(features.T).astype(np.float32)[shuffle_index[sampl_start+val_size:sampl_end]]
+        train_labels = labels[shuffle_index[sampl_start:sampl_start+train_size]]
+        val_labels = labels[shuffle_index[train_size:val_size]]
+        test_labels = labels[shuffle_index[sampl_start+val_size:sampl_end]]        
     
     #    train_data = np.asarray(features.T).astype(np.float32)[shuffle_index]
     #    indices = range(train_data.shape[0])
@@ -341,7 +355,8 @@ for idxx1, idxx2 in [['1','2']]:
     ##                                        train_data, train_labels,train_index, test_size=0.1, random_state=42, stratify = train_labels)
     ##    
         
-    #    ll, cnt = np.unique(train_labels,return_counts=True)
+        ll, cnt = np.unique(train_labels,return_counts=True)
+        print(ll, cnt)
     #    for ll_i, cnt_i in zip(ll, cnt):
     #        if cnt_i > len(train_labels)/100:continue
     #        temp_data = train_data[np.where(train_labels==ll_i)]
@@ -593,19 +608,21 @@ for idxx1, idxx2 in [['1','2']]:
     testPreds4save.insert(0, 'trueLabels', list(predictions.iloc[:,0]))
     aa = np.exp(np.asarray(predictions.iloc[:,1:]))
     confusionGCN = pd.DataFrame(confusionGCN)
-#    if args.dataset in ['pancreas','CellBench']:
-#        testPreds4save.to_csv('newgcn_test_preds_'+ args.dataset+str(args.num_gene) +'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.csv')
-#        predictions.to_csv('newgcn_testProbs_preds_'+ args.dataset+str(args.num_gene)+'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.csv')
-#        confusionGCN.to_csv('newgcn_confuMat_'+ args.dataset + str(args.num_gene)+'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.csv')
-#        np.savetxt('newgcn_train_time_'+args.dataset + str(args.num_gene)+'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.txt', [t_total_train])   
-#        np.savetxt('newgcn_test_time_'+args.dataset + str(args.num_gene)+'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.txt', [t_stop_test]) 
-#
-#    else:
-#        testPreds4save.to_csv('newgcn_test_preds_'+ args.dataset+ str(args.num_gene)+'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.csv')
-#        predictions.to_csv('newgcn_testProbs_preds_'+ args.dataset+ str(args.num_gene)+'_'+str(CL1_F)+str(CL1_K)+'_' +args.dist+'.csv')
-#        confusionGCN.to_csv('newgcn_confuMat_'+ args.dataset+ str(args.num_gene)+'_'+str(CL1_F)+str(CL1_K)+'_' +args.dist+'.csv')    
-#        np.savetxt('newgcn_train_time_'+args.dataset + str(args.num_gene) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.txt', [t_total_train])   
-#        np.savetxt('newgcn_test_time_'+args.dataset + str(args.num_gene) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.txt', [t_stop_test]) 
+    totlePath = '/Users/tianyu/Desktop/scRNAseq_Benchmark_datasets/Intra-dataset'
+    OutputDir = totlePath +'/' + args.dataset +'/numCells/output' + str(args.sampling_rate)
+    if args.dataset in ['pancreas','CellBench']:
+        testPreds4save.to_csv('newgcn_test_preds_'+ args.dataset+str(args.num_gene) +'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.csv')
+        predictions.to_csv('newgcn_testProbs_preds_'+ args.dataset+str(args.num_gene)+'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.csv')
+        confusionGCN.to_csv('newgcn_confuMat_'+ args.dataset + str(args.num_gene)+'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.csv')
+        np.savetxt('newgcn_train_time_'+args.dataset + str(args.num_gene)+'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.txt', [t_total_train])   
+        np.savetxt('newgcn_test_time_'+args.dataset + str(args.num_gene)+'_'+str(id1)+str(id2) +'_'+str(CL1_F)+str(CL1_K)+'_'+args.dist+'.txt', [t_stop_test]) 
+
+    else:
+        testPreds4save.to_csv(OutputDir+'/newgcn_test_preds_'+ args.dataset+ str(args.num_gene)+'_'+str(CL1_F)+str(CL1_K)+''+args.dist+'.csv')
+        predictions.to_csv(OutputDir+'/newgcn_testProbs_preds_'+ args.dataset+ str(args.num_gene)+'_'+str(CL1_F)+str(CL1_K)+'' +args.dist+'.csv')
+        confusionGCN.to_csv(OutputDir+'/newgcn_confuMat_'+ args.dataset+ str(args.num_gene)+'_'+str(CL1_F)+str(CL1_K)+'' +args.dist+'.csv')    
+        np.savetxt(OutputDir+'/newgcn_train_time_'+args.dataset + str(args.num_gene) +'_'+str(CL1_F)+str(CL1_K)+''+args.dist+'.txt', [t_total_train])   
+        np.savetxt(OutputDir+'/newgcn_test_time_'+args.dataset + str(args.num_gene) +'_'+str(CL1_F)+str(CL1_K)+''+args.dist+'.txt', [t_stop_test]) 
     
     #########
     preds = np.power(2.71, np.asarray(predictions)[:, 1:])
